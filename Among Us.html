@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Among Us Clone - Fix Vents</title>
+    <style>
+        body, html { margin: 0; padding: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: white; user-select: none; }
+        canvas { display: block; }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; text-align: center; text-shadow: 2px 2px 4px #000;}
+
+        /* Menu TAB */
+        #devMenu {
+            position: absolute; top: 10px; left: 10px; background: rgba(15, 20, 25, 0.95);
+            padding: 15px; border: 1px solid #444; border-radius: 8px; display: none;
+            z-index: 10; width: 340px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); backdrop-filter: blur(5px);
+            max-height: 90vh; overflow-y: auto;
+        }
+        #devMenu h2 { margin-top: 0; font-size: 16px; border-bottom: 1px solid #444; padding-bottom: 8px; color: #00ffcc; margin-bottom: 15px;}
+        .section { background: rgba(0,0,0,0.4); padding: 10px; border-radius: 5px; margin-bottom: 10px; border: 1px solid #333;}
+        .section h3 { margin: 0 0 10px 0; font-size: 13px; color: #ffeb3b;}
+        .control-group { margin-bottom: 10px; }
+        .control-group label { display: block; margin-bottom: 3px; font-size: 12px; font-weight: bold; color: #ccc;}
+        .control-group input[type="range"] { width: 100%; cursor: pointer;}
+        
+        button { background: #00ffcc; color: #000; border: none; padding: 8px; width: 100%; cursor: pointer; font-weight: bold; border-radius: 4px; margin-top: 5px; font-size: 13px;}
+        #btnTeleport { background: #ff5722; color: white;}
+        #configOutput { width: 100%; height: 60px; margin-top: 5px; background: #111; color: #0f0; border: 1px solid #444; padding: 5px; font-family: monospace; font-size: 11px; resize: none; box-sizing: border-box;}
+        #controlsInfo { position: absolute; top: 10px; right: 10px; text-shadow: 2px 2px 0 #000; pointer-events: none; text-align: right;}
+        #controlsInfo h3 { color: #ffeb3b; margin: 0 0 5px 0;}
+        
+        .role-radio { display: flex; gap: 10px; font-size: 12px; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+    <div id="loading">Integrando Tubulações...<br><small id="loadStatus" style="font-size: 14px; color: #aaa;"></small></div>
+    
+    <div id="controlsInfo">
+        <h3>Aperte [TAB] para Menu</h3>
+        <p>Aproxime-se do amarelo e aperte [E]</p>
+        <p>Use o Mouse nas setas e tasks</p>
+    </div>
+
+    <!-- MENU DE DESENVOLVEDOR (TAB) -->
+    <div id="devMenu">
+        <h2>🛠️ Painel da Nave</h2>
+
+        <div class="section">
+            <h3>🎭 Regras e Permissões</h3>
+            <label style="font-size: 12px; font-weight: bold;">Seu Cargo Atual:</label>
+            <div class="role-radio">
+                <label><input type="radio" name="myRole" value="IMPOSTOR" checked> Impostor</label>
+                <label><input type="radio" name="myRole" value="CREWMATE"> Inocente</label>
+            </div>
+            <label style="font-size: 12px; font-weight: bold; margin-top: 5px; display:block;">Regra da Tubulação (Dutos):</label>
+            <div class="role-radio">
+                <label><input type="radio" name="ventRule" value="RESTRICTED" checked> Só Impostor</label>
+                <label><input type="radio" name="ventRule" value="FREE"> Liberado p/ Todos</label>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>🕳️ Construtor de Tubulação</h3>
+            <label style="font-size: 12px; display: block; margin-bottom: 5px; color:#ff5722;"><input type="checkbox" id="chkBuildVent"> Ativar Modo Construtor de Dutos</label>
+            <div style="font-size: 11px; color: #aaa;">
+                1º Clique: Posiciona Duto de Origem<br>
+                2º Clique: Posiciona Destino (Link criado!)
+            </div>
+            <div style="font-size: 11px; color: #00ffcc; margin-top: 5px;" id="ventBuilderStatus">Aguardando...</div>
+        </div>
+
+        <div class="section">
+            <h3>📍 Spawn (Nascimento)</h3>
+            <label style="font-size: 12px; display: block; margin-bottom: 5px;"><input type="checkbox" id="chkSetSpawn"> Mudar Spawn no Clique</label>
+            <button id="btnTeleport">Teleportar para Spawn</button>
+        </div>
+
+        <div class="section">
+            <h3>⚙️ Física</h3>
+            <div class="control-group"><label>Zoom (<span id="valZoom">4</span>)</label><input type="range" id="zoomSlider" min="0.5" max="5" step="0.1" value="4"></div>
+            <div class="control-group"><label>Velocidade (<span id="valSpeed">2</span>)</label><input type="range" id="speedSlider" min="1" max="10" step="0.5" value="2"></div>
+        </div>
+        <button id="btnGenerate">Gerar Código (Com Dutos!)</button>
+        <textarea id="configOutput" readonly></textarea>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    // ==========================================
+    // 1. DADOS E ESTADOS
+    // ==========================================
+    let CONFIG = {
+        cameraZoom: 4, playerSize: 20, hitboxRadius: 5, playerSpeed: 2,
+        spawnX: 606, spawnY: 104,
+        myRole: "IMPOSTOR",
+        ventRule: "RESTRICTED"
+    };
+
+    let gameState = "PLAYING"; 
+    let currentTaskOpen = null;
+    let showDebugUI = false;
+
+    // ESTADO DAS TUBULAÇÕES
+    let playerInVent = false;
+    let currentVentId = null;
+    let ventBuildStep = 0; 
+    let tempOrigemId = null;
+    let ventIdCounter = 0; 
+
+    let ventsData = []; // Rede de Dutos
+    let miniGameData = { asteroids: [], destroyedCount: 0, downloadProgress: 0, isDownloading: false };
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    let mouseX = 0; let mouseY = 0;
+
+    function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+    window.addEventListener('resize', resizeCanvas); resizeCanvas();
+
+    const tasks = [
+        { id: "med_scan", room: "MedBay", name: "Fazer o Scan", type: "GENERIC", x: 462.6, y: 290.3, completed: false },
+        { id: "sec_down", room: "Security", name: "Download", type: "DOWNLOAD", x: 147.3, y: 369, completed: false },
+        { id: "weap_aster", room: "Weapons", name: "Atirar Asteroides", type: "ASTEROIDS", x: 830, y: 137, completed: false }
+    ];
+
+    // ==========================================
+    // 2. CARREGAMENTO DE ASSETS
+    // ==========================================
+    const assets = { 
+        map: new Image(), collisionMap: new Image(), playerIdle: new Image(), playerRun: new Image(),
+        ventBase: new Image(), ventArrow: new Image()
+    };
+    let assetsLoaded = 0; const totalAssets = 6;
+    
+    function checkLoad() {
+        assetsLoaded++; document.getElementById('loadStatus').innerText = `Carregado: ${assetsLoaded}/${totalAssets}`;
+        if (assetsLoaded === totalAssets) { setupCollisionSystem(); document.getElementById('loading').style.display = 'none'; initGame(); }
+    }
+    
+    Object.values(assets).forEach(img => { img.crossOrigin = "Anonymous"; img.onload = checkLoad; });
+    
+    assets.map.src = 'https://raw.githubusercontent.com/sombrassinistras-max/Among-Us-2/main/among%20us%20map.jpg';
+    assets.collisionMap.src = 'https://raw.githubusercontent.com/sombrassinistras-max/Among-Us-2/main/Among%20us%20Map%20COlission.png';
+    assets.playerIdle.src = 'https://raw.githubusercontent.com/sombrassinistras-max/Among-Us-2/main/Among%20us%20personagem.png';
+    assets.playerRun.src = 'https://raw.githubusercontent.com/sombrassinistras-max/Among-Us-2/main/Among%20us%20personagem%20Correndo.gif';
+    assets.ventBase.src = 'https://raw.githubusercontent.com/sombrassinistras-max/Among-Us-2/main/Tubula%C3%A7%C3%A3o.png';
+    assets.ventArrow.src = 'https://raw.githubusercontent.com/sombrassinistras-max/Among-Us-2/main/Setinha.png';
+
+    let collisionCanvas, collisionCtx, collisionPixels;
+    function setupCollisionSystem() {
+        collisionCanvas = document.createElement('canvas'); collisionCanvas.width = assets.collisionMap.width; collisionCanvas.height = assets.collisionMap.height;
+        collisionCtx = collisionCanvas.getContext('2d', { willReadFrequently: true });
+        collisionCtx.drawImage(assets.collisionMap, 0, 0);
+        collisionPixels = collisionCtx.getImageData(0, 0, collisionCanvas.width, collisionCanvas.height).data;
+    }
+    function isWall(x, y) {
+        if (x < 0 || x >= collisionCanvas.width || y < 0 || y >= collisionCanvas.height) return true;
+        return collisionPixels[(Math.floor(y) * collisionCanvas.width + Math.floor(x)) * 4] < 128; 
+    }
+    function checkHitboxCollision(x, y, radius) {
+        for (let i = 0; i < 8; i++) { if (isWall(x + Math.cos((i * (Math.PI * 2)) / 8) * radius, y + Math.sin((i * (Math.PI * 2)) / 8) * radius)) return true; }
+        return false;
+    }
+
+    // ==========================================
+    // 3. JOGADOR E BOTS
+    // ==========================================
+    const player = { x: CONFIG.spawnX, y: CONFIG.spawnY, facingRight: true, isMoving: false };
+    const bots = [];
+
+    // ==========================================
+    // 4. LÓGICA DE REGRAS E PERMISSÕES
+    // ==========================================
+    function canUseVents() {
+        if (CONFIG.ventRule === "FREE") return true; 
+        if (CONFIG.ventRule === "RESTRICTED" && CONFIG.myRole === "IMPOSTOR") return true; 
+        return false; 
+    }
+
+    function getNearbyInteractable() {
+        if (canUseVents()) {
+            for (let vent of ventsData) {
+                // REDUZIDO RAIO DE INTERAÇÃO COM O DUTO
+                if (Math.hypot(player.x - vent.x, player.y - vent.y) < 20) return { type: 'VENT', obj: vent };
+            }
+        }
+        if(CONFIG.myRole !== "IMPOSTOR") {
+            for (let task of tasks) {
+                if (!task.completed && Math.hypot(player.x - task.x, player.y - task.y) < 25) return { type: 'TASK', obj: task };
+            }
+        }
+        return null;
+    }
+
+    // ==========================================
+    // 5. INPUTS E CLIQUES
+    // ==========================================
+    const keys = { w: false, a: false, s: false, d: false };
+
+    window.addEventListener('keydown', (e) => {
+        if(gameState === 'DOING_TASK') { if(e.key === 'Escape') fecharTask(); return; }
+
+        if (e.key === 'w' || e.key === 'ArrowUp') keys.w = true;
+        if (e.key === 'a' || e.key === 'ArrowLeft') keys.a = true;
+        if (e.key === 's' || e.key === 'ArrowDown') keys.s = true;
+        if (e.key === 'd' || e.key === 'ArrowRight') keys.d = true;
+        
+        // INTERAÇÃO (E) - SAIR E ENTRAR NO DUTO CORRIGIDO
+        if (e.key === 'e' || e.key === 'E') {
+            if (playerInVent) {
+                playerInVent = false; // Força a saída
+                currentVentId = null;
+            } else {
+                let inter = getNearbyInteractable();
+                if (inter) {
+                    if (inter.type === 'TASK') {
+                        currentTaskOpen = inter.obj; gameState = 'DOING_TASK'; keys.w = keys.a = keys.s = keys.d = false; 
+                        iniciarMinigame();
+                    } else if (inter.type === 'VENT') {
+                        playerInVent = true;
+                        currentVentId = inter.obj.id;
+                        player.x = inter.obj.x; player.y = inter.obj.y; 
+                        keys.w = keys.a = keys.s = keys.d = false; 
+                    }
+                }
+            }
+        }
+        if (e.key === 'Tab') { e.preventDefault(); showDebugUI = !showDebugUI; document.getElementById('devMenu').style.display = showDebugUI ? 'block' : 'none'; }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (e.key === 'w' || e.key === 'ArrowUp') keys.w = false;
+        if (e.key === 'a' || e.key === 'ArrowLeft') keys.a = false;
+        if (e.key === 's' || e.key === 'ArrowDown') keys.s = false;
+        if (e.key === 'd' || e.key === 'ArrowRight') keys.d = false;
+    });
+
+    window.addEventListener('mousemove', (e) => { mouseX = e.clientX; mouseY = e.clientY; });
+
+    // A MUDANÇA PRINCIPAL: ESCUTAR O CANVAS, NÃO A WINDOW (Evita bugar com o Menu)
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        let worldX = ((e.clientX - rect.left) - canvas.width / 2) / CONFIG.cameraZoom + player.x;
+        let worldY = ((e.clientY - rect.top) - canvas.height / 2) / CONFIG.cameraZoom + player.y;
+
+        // 1. DENTRO DO DUTO
+        if (playerInVent && currentVentId !== null) {
+            let currentVent = ventsData.find(v => v.id === currentVentId);
+            if(currentVent && currentVent.links) {
+                currentVent.links.forEach(targetId => {
+                    let destVent = ventsData.find(v => v.id === targetId);
+                    if(destVent) {
+                        let angle = Math.atan2(destVent.y - currentVent.y, destVent.x - currentVent.x);
+                        let arrowDist = 45; 
+                        let ax = currentVent.x + Math.cos(angle) * arrowDist;
+                        let ay = currentVent.y + Math.sin(angle) * arrowDist;
+
+                        if (Math.hypot(worldX - ax, worldY - ay) < 25) {
+                            player.x = destVent.x; player.y = destVent.y; 
+                            currentVentId = destVent.id; 
+                        }
+                    }
+                });
+            }
+            return; 
+        }
+
+        // 2. CONSTRUTOR DE DUTOS
+        if (showDebugUI && document.getElementById('chkBuildVent').checked && gameState === 'PLAYING') {
+            if (ventBuildStep === 1) {
+                let newVent = { id: `vent_${ventIdCounter++}`, x: worldX, y: worldY, links: [] };
+                ventsData.push(newVent);
+                tempOrigemId = newVent.id;
+                ventBuildStep = 2;
+                document.getElementById('ventBuilderStatus').innerText = "Clique para definir a Saída";
+            } else if (ventBuildStep === 2) {
+                let newVent = { id: `vent_${ventIdCounter++}`, x: worldX, y: worldY, links: [] };
+                ventsData.push(newVent);
+                let origem = ventsData.find(v => v.id === tempOrigemId);
+                origem.links.push(newVent.id);
+
+                ventBuildStep = 1;
+                document.getElementById('ventBuilderStatus').innerText = "Link Criado! Clique p/ nova Origem";
+            }
+            return;
+        }
+
+        // 3. SETAR SPAWN
+        if (showDebugUI && document.getElementById('chkSetSpawn').checked && gameState === 'PLAYING') {
+            CONFIG.spawnX = Math.round(worldX); CONFIG.spawnY = Math.round(worldY);
+        }
+
+        // 4. MINIGAMES
+        if (gameState === 'DOING_TASK') {
+            let cx = canvas.width / 2; let cy = canvas.height / 2;
+            if(currentTaskOpen.type === 'ASTEROIDS') {
+                for (let i = miniGameData.asteroids.length - 1; i >= 0; i--) {
+                    let ast = miniGameData.asteroids[i];
+                    if (Math.hypot(mouseX - (cx + ast.x), mouseY - (cy + ast.y)) < ast.radius) {
+                        miniGameData.asteroids.splice(i, 1); miniGameData.destroyedCount++;
+                        if (miniGameData.destroyedCount >= 10) { currentTaskOpen.completed = true; fecharTask(); } break;
+                    }
+                }
+            }
+            if(currentTaskOpen.type === 'DOWNLOAD') {
+                if (mouseX > cx - 60 && mouseX < cx + 60 && mouseY > cy + 120 && mouseY < cy + 160) miniGameData.isDownloading = true;
+            }
+            if(currentTaskOpen.type === 'GENERIC') {
+                if (mouseX > cx - 100 && mouseX < cx + 100 && mouseY > cy - 30 && mouseY < cy + 30) { currentTaskOpen.completed = true; fecharTask(); }
+            }
+        }
+    });
+
+    // Eventos UI
+    document.getElementById('chkBuildVent').addEventListener('change', (e) => {
+        ventBuildStep = e.target.checked ? 1 : 0;
+        document.getElementById('ventBuilderStatus').innerText = e.target.checked ? "Clique no mapa: Origem" : "Aguardando...";
+    });
+    
+    document.querySelectorAll('input[name="myRole"]').forEach(r => r.addEventListener('change', e => CONFIG.myRole = e.target.value));
+    document.querySelectorAll('input[name="ventRule"]').forEach(r => r.addEventListener('change', e => CONFIG.ventRule = e.target.value));
+    document.getElementById('btnTeleport').addEventListener('click', () => { player.x = CONFIG.spawnX; player.y = CONFIG.spawnY; });
+    document.getElementById('btnGenerate').addEventListener('click', () => { 
+        let output = { config: CONFIG, tubulacoes: ventsData };
+        document.getElementById('configOutput').value = JSON.stringify(output, null, 2); 
+    });
+
+    const sZoom = document.getElementById('zoomSlider'); const sSpeed = document.getElementById('speedSlider');
+    function updateConfigFromUI() { CONFIG.cameraZoom = parseFloat(sZoom.value); document.getElementById('valZoom').innerText = CONFIG.cameraZoom; CONFIG.playerSpeed = parseFloat(sSpeed.value); }
+    sZoom.addEventListener('input', updateConfigFromUI); sSpeed.addEventListener('input', updateConfigFromUI);
+
+    // ==========================================
+    // 6. MINIGAMES LÓGICA
+    // ==========================================
+    function fecharTask() { currentTaskOpen = null; gameState = 'PLAYING'; }
+    function iniciarMinigame() { miniGameData.asteroids = []; miniGameData.destroyedCount = 0; miniGameData.downloadProgress = 0; miniGameData.isDownloading = false; }
+    
+    function updateMiniGames() {
+        if(currentTaskOpen.type === 'ASTEROIDS') {
+            if(miniGameData.asteroids.length < 5 && Math.random() < 0.05) {
+                miniGameData.asteroids.push({ x: 350, y: (Math.random() * 300) - 150, vx: -(Math.random() * 3 + 2), vy: (Math.random() - 0.5) * 2, radius: Math.random() * 15 + 15 });
+            }
+            miniGameData.asteroids.forEach(ast => { ast.x += ast.vx; ast.y += ast.vy; });
+            miniGameData.asteroids = miniGameData.asteroids.filter(ast => ast.x > -350);
+        }
+        if(currentTaskOpen.type === 'DOWNLOAD' && miniGameData.isDownloading) {
+            miniGameData.downloadProgress += 0.5;
+            if(miniGameData.downloadProgress >= 100) { currentTaskOpen.completed = true; fecharTask(); }
+        }
+    }
+
+    function drawTaskInterface(ctx) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.85)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.save(); ctx.translate(canvas.width / 2, canvas.height / 2);
+        
+        ctx.fillStyle = '#1c2331'; ctx.beginPath(); ctx.roundRect(-325, -225, 650, 450, 15); ctx.fill();
+        ctx.strokeStyle = '#394b5f'; ctx.lineWidth = 4; ctx.stroke();
+        
+        let localMouseX = mouseX - canvas.width / 2; let localMouseY = mouseY - canvas.height / 2;
+
+        if (currentTaskOpen.type === 'ASTEROIDS') {
+            ctx.fillStyle = '#001a00'; ctx.fillRect(-250, -140, 500, 280);
+            ctx.fillStyle = '#7f8c8d'; ctx.strokeStyle = '#95a5a6'; ctx.lineWidth = 2;
+            miniGameData.asteroids.forEach(ast => { ctx.beginPath(); ctx.arc(ast.x, ast.y, ast.radius, 0, Math.PI*2); ctx.fill(); ctx.stroke(); });
+            ctx.fillStyle = '#00ff00'; ctx.font = '20px monospace'; ctx.fillText(`Destruídos: ${miniGameData.destroyedCount} / 10`, -240, -110);
+            ctx.strokeStyle = '#00ff00'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(localMouseX - 20, localMouseY); ctx.lineTo(localMouseX + 20, localMouseY); ctx.stroke(); ctx.beginPath(); ctx.moveTo(localMouseX, localMouseY - 20); ctx.lineTo(localMouseX, localMouseY + 20); ctx.stroke();
+        } else if (currentTaskOpen.type === 'DOWNLOAD') {
+            ctx.fillStyle = '#1e2738'; ctx.fillRect(-250, -120, 500, 240);
+            ctx.fillStyle = '#0b0f19'; ctx.beginPath(); ctx.roundRect(-200, 60, 400, 30, 15); ctx.fill();
+            let barW = (miniGameData.downloadProgress / 100) * 400;
+            ctx.fillStyle = '#00ffcc'; ctx.beginPath(); ctx.roundRect(-200, 60, Math.max(15, barW), 30, 15); ctx.fill();
+            ctx.fillStyle = miniGameData.isDownloading ? '#555' : '#3498db'; ctx.beginPath(); ctx.roundRect(-60, 120, 120, 40, 5); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Arial'; ctx.textAlign='center'; ctx.fillText(miniGameData.isDownloading ? 'Baixando...' : 'Iniciar Download', 0, 145);
+        } else {
+            ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.roundRect(-100, -30, 200, 60, 10); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 18px Arial'; ctx.textAlign='center'; ctx.fillText('CLIQUE PARA COMPLETAR', 0, 5);
+        }
+        ctx.restore();
+    }
+
+    // ==========================================
+    // 7. MOTOR (ATUALIZAÇÃO E RENDERIZAÇÃO)
+    // ==========================================
+    function update() {
+        if (gameState === 'DOING_TASK') { updateMiniGames(); return; }
+        if (playerInVent) return; 
+
+        let moveX = 0; let moveY = 0;
+        if (keys.w) moveY = -CONFIG.playerSpeed;
+        if (keys.s) moveY = CONFIG.playerSpeed;
+        if (keys.a) { moveX = -CONFIG.playerSpeed; player.facingRight = false; }
+        if (keys.d) { moveX = CONFIG.playerSpeed; player.facingRight = true; }
+        player.isMoving = (moveX !== 0 || moveY !== 0);
+
+        if (moveX !== 0 && !checkHitboxCollision(player.x + moveX, player.y, CONFIG.hitboxRadius)) player.x += moveX;
+        if (moveY !== 0 && !checkHitboxCollision(player.x, player.y + moveY, CONFIG.hitboxRadius)) player.y += moveY;
+    }
+
+    function draw() {
+        ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.save(); ctx.translate(canvas.width / 2, canvas.height / 2); ctx.scale(CONFIG.cameraZoom, CONFIG.cameraZoom); ctx.translate(-player.x, -player.y);
+        ctx.drawImage(assets.map, 0, 0);
+
+        // --- DESENHAR TUBULAÇÕES ---
+        ventsData.forEach(vent => {
+            // CORREÇÃO: Tamanho real e centralizado
+            let ventW = 34; let ventH = 24;
+            ctx.drawImage(assets.ventBase, vent.x - ventW/2, vent.y - ventH/2, ventW, ventH);
+
+            let isNear = Math.hypot(player.x - vent.x, player.y - vent.y) < 25; // Raio menor
+            if (isNear && canUseVents() && !playerInVent) {
+                let pulse = Math.abs(Math.sin(Date.now() / 150)) * 2;
+                ctx.strokeStyle = `rgba(255, 255, 0, ${0.7 + pulse/10})`; 
+                ctx.lineWidth = 1.5 + pulse;
+                // CORREÇÃO: Borda cola no desenho
+                ctx.strokeRect(vent.x - ventW/2, vent.y - ventH/2, ventW, ventH); 
+            }
+        });
+
+        // --- DESENHAR SETAS ---
+        if (playerInVent && currentVentId !== null) {
+            let currentVent = ventsData.find(v => v.id === currentVentId);
+            if(currentVent && currentVent.links) {
+                currentVent.links.forEach(targetId => {
+                    let destVent = ventsData.find(v => v.id === targetId);
+                    if(destVent) {
+                        let angle = Math.atan2(destVent.y - currentVent.y, destVent.x - currentVent.x);
+                        let arrowDist = 45; 
+                        let ax = currentVent.x + Math.cos(angle) * arrowDist;
+                        let ay = currentVent.y + Math.sin(angle) * arrowDist;
+                        
+                        ctx.save();
+                        ctx.translate(ax, ay);
+                        ctx.rotate(angle); 
+                        ctx.drawImage(assets.ventArrow, -15, -15, 30, 30);
+                        ctx.restore();
+                    }
+                });
+            }
+        }
+
+        if (CONFIG.myRole !== "IMPOSTOR") {
+            tasks.forEach(task => {
+                let isNear = Math.hypot(player.x - task.x, player.y - task.y) < 25;
+                if (!task.completed && isNear && !playerInVent) {
+                    let pulse = Math.abs(Math.sin(Date.now() / 150)) * 4;
+                    ctx.beginPath(); ctx.arc(task.x, task.y, 8, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(255, 255, 0, 0.5)'; ctx.fill();
+                    ctx.lineWidth = 1.5 + pulse; ctx.strokeStyle = 'rgba(255, 255, 0, 0.9)'; ctx.stroke();
+                }
+            });
+        }
+
+        if (!playerInVent) {
+            ctx.save(); ctx.translate(player.x, player.y);
+            if (!player.facingRight) ctx.scale(-1, 1);
+            ctx.drawImage(player.isMoving ? assets.playerRun : assets.playerIdle, -CONFIG.playerSize / 2, -CONFIG.playerSize / 2, CONFIG.playerSize, CONFIG.playerSize);
+            ctx.restore();
+        }
+
+        ctx.restore(); 
+
+        // UI
+        if (gameState === 'PLAYING') {
+            if (playerInVent) {
+                ctx.fillStyle = 'rgba(200,0,0,0.8)'; ctx.beginPath(); ctx.roundRect(canvas.width/2 - 70, canvas.height/2 + 60, 140, 35, 8); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center'; ctx.fillText('Sair do Duto [E]', canvas.width/2, canvas.height/2 + 84);
+            } else {
+                let inter = getNearbyInteractable();
+                if (inter) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.beginPath(); ctx.roundRect(canvas.width/2 - 70, canvas.height/2 + 60, 140, 35, 8); ctx.fill();
+                    ctx.fillStyle = '#00ffcc'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center'; ctx.fillText(inter.type==='VENT' ? 'Entrar Duto [E]' : 'Usar [E]', canvas.width/2, canvas.height/2 + 84);
+                }
+            }
+        }
+
+        if (gameState === 'DOING_TASK') drawTaskInterface(ctx);
+    }
+
+    function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
+
+    function initGame() {
+        document.getElementById('zoomSlider').value = CONFIG.cameraZoom; document.getElementById('speedSlider').value = CONFIG.playerSpeed;
+        gameLoop();
+    }
+</script>
+</body>
+</html>

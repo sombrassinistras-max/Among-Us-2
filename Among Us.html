@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Among Us Clone - Jogo Completo</title>
+    <title>Among Us Clone - Edição Definitiva (Animação Corrigida)</title>
     <style>
         body, html { margin: 0; padding: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: white; user-select: none; }
         canvas { display: block; }
@@ -33,26 +33,28 @@
 </head>
 <body>
 
-    <div id="loading">Integrando Tasks e Sistemas...<br><small id="loadStatus" style="font-size: 14px; color: #aaa;"></small></div>
+    <div id="loading">Integrando Sistemas Finais...<br><small id="loadStatus" style="font-size: 14px; color: #aaa;"></small></div>
     
     <div id="controlsInfo">
         <h3>Aperte [TAB] para Menu</h3>
-        <p>Aproxime-se do amarelo e aperte [E]</p>
-        <p>Use o Mouse para interagir nas Tasks</p>
+        <p>Aproxime-se e aperte [E]</p>
+        <p>Use o Mouse nas setas e tasks</p>
     </div>
 
     <div id="devMenu">
         <h2>🛠️ Painel da Nave</h2>
+        
         <div class="section">
             <h3>🔊 Áudio</h3>
             <label style="font-size: 12px;"><input type="checkbox" id="chkSound" checked> Efeitos Sonoros Ativos</label>
         </div>
+
         <div class="section">
             <h3>🎭 Regras e Permissões</h3>
             <label style="font-size: 12px; font-weight: bold;">Seu Cargo Atual:</label>
             <div class="role-radio">
-                <label><input type="radio" name="myRole" value="IMPOSTOR"> Impostor</label>
-                <label><input type="radio" name="myRole" value="CREWMATE" checked> Inocente</label> <!-- Mudado para Inocente padrão -->
+                <label><input type="radio" name="myRole" value="IMPOSTOR" checked> Impostor</label>
+                <label><input type="radio" name="myRole" value="CREWMATE"> Inocente</label>
             </div>
             <label style="font-size: 12px; font-weight: bold; margin-top: 5px; display:block;">Regra da Tubulação (Dutos):</label>
             <div class="role-radio">
@@ -60,11 +62,13 @@
                 <label><input type="radio" name="ventRule" value="FREE"> Liberado p/ Todos</label>
             </div>
         </div>
+
         <div class="section">
             <h3>🕳️ Construtor de Tubulação</h3>
             <label style="font-size: 12px; display: block; margin-bottom: 5px; color:#ff5722;"><input type="checkbox" id="chkBuildVent"> Ativar Modo Construtor</label>
             <div style="font-size: 11px; color: #00ffcc;" id="ventBuilderStatus">Aguardando...</div>
         </div>
+
         <div class="section">
             <h3>⚙️ Física e Spawn</h3>
             <label style="font-size: 12px; display: block; margin-bottom: 5px;"><input type="checkbox" id="chkSetSpawn"> Mudar Spawn no Clique</label>
@@ -119,41 +123,26 @@
     const sfx = new SoundBank();
 
     // ==========================================
-    // 1. DADOS DE SPAWN E JOGADOR
+    // 1. CONFIGURAÇÕES 
     // ==========================================
     let CONFIG = {
         cameraZoom: 4, playerSize: 20, hitboxRadius: 5, playerSpeed: 2,
-        spawnX: 606, spawnY: 104, myRole: "CREWMATE", ventRule: "RESTRICTED"
+        spawnX: 606, spawnY: 104, myRole: "IMPOSTOR", ventRule: "RESTRICTED",
+        // CONFIGURAÇÕES DE ANIMAÇÃO (Spritesheet)
+        numFrames: 4,     // Ajuste para a quantidade de frames do seu GIF
+        frameSpeed: 5     // Ajuste para a velocidade da animação
     };
 
     let gameState = "PLAYING"; 
     let currentTaskOpen = null;
     let showDebugUI = false;
 
-    // As 13 Tasks que você mapeou
-    const tasks =[
-        { id: "med_scan", room: "MedBay", name: "Fazer o Scan", type: "SCAN", x: 462.6, y: 290.3, completed: false },
-        { id: "sec_down", room: "Security", name: "Download de Dados", type: "DOWNLOAD", x: 147.3, y: 369, completed: false },
-        { id: "elec_calib", room: "Electrical", name: "Calibrar Distribuidor", type: "CALIBRATE", x: 197.3, y: 454.3, completed: false },
-        { id: "elec_wires", room: "Electrical", name: "Fios Elétricos", type: "WIRES", x: 405.3, y: 341, completed: false },
-        { id: "stor_fuel", room: "Storage", name: "Encher Galão", type: "FUEL", x: 561.3, y: 485, completed: false },
-        { id: "stor_trash", room: "Storage", name: "Esvaziar o Lixo", type: "TRASH", x: 596.6, y: 619.6, completed: false },
-        { id: "admin_card", room: "Admin", name: "Passar o Cartão", type: "SWIPE", x: 750.6, y: 373.6, completed: false },
-        { id: "admin_down", room: "Admin", name: "Download de Dados", type: "DOWNLOAD", x: 145.3, y: 210.3, completed: false },
-        { id: "nav_align", room: "Navigation", name: "Alinhar Curso", type: "ALIGN", x: 558, y: 665.6, completed: false },
-        { id: "o2_filter", room: "O2", name: "Limpar Filtro", type: "LEAVES", x: 742, y: 69.6, completed: false },
-        { id: "o2_trash", room: "O2", name: "Esvaziar Lixo", type: "TRASH", x: 642.6, y: 551.6, completed: false },
-        { id: "weap_aster", room: "Weapons", name: "Atirar Asteroides", type: "ASTEROIDS", x: 830, y: 137, completed: false },
-        { id: "weap_down", room: "Weapons", name: "Download de Dados", type: "DOWNLOAD", x: 733.3, y: 562.3, completed: false }
-    ];
-
-    // Os Dutos que você mapeou
     let ventsData =[
-        { id: "vent_0", x: 721.25, y: 183.125, links: ["vent_1"] },
+        { id: "vent_0", x: 721.25, y: 183.125, links:["vent_1"] },
         { id: "vent_1", x: 822.25, y: 104.875, links:[] },
-        { id: "vent_2", x: 836.5, y: 322.25, links: ["vent_3"] },
+        { id: "vent_2", x: 836.5, y: 322.25, links:["vent_3"] },
         { id: "vent_3", x: 986.5, y: 320.25, links:[] },
-        { id: "vent_4", x: 986.25, y: 248.25, links: ["vent_5"] },
+        { id: "vent_4", x: 986.25, y: 248.25, links:["vent_5"] },
         { id: "vent_5", x: 841.25, y: 499.875, links:[] },
         { id: "vent_6", x: 683.25, y: 399, links: ["vent_7"] },
         { id: "vent_7", x: 405.25, y: 357.75, links:[] },
@@ -165,7 +154,6 @@
         { id: "vent_13", x: 387, y: 271.625, links:[] }
     ];
 
-    // Torna todos os dutos de Ida e Volta automaticamente
     ventsData.forEach(v => {
         v.links.forEach(linkId => {
             let target = ventsData.find(t => t.id === linkId);
@@ -182,6 +170,22 @@
     let mouseX = 0; let mouseY = 0;
     function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
     window.addEventListener('resize', resizeCanvas); resizeCanvas();
+
+    const tasks =[
+        { id: "med_scan", room: "MedBay", name: "Fazer o Scan", type: "SCAN", x: 462.6, y: 290.3, completed: false },
+        { id: "sec_down", room: "Security", name: "Download", type: "DOWNLOAD", x: 147.3, y: 369, completed: false },
+        { id: "elec_calib", room: "Electrical", name: "Calibrar", type: "CALIBRATE", x: 197.3, y: 454.3, completed: false },
+        { id: "elec_wires", room: "Electrical", name: "Fios Elétricos", type: "WIRES", x: 405.3, y: 341, completed: false },
+        { id: "stor_fuel", room: "Storage", name: "Encher Galão", type: "FUEL", x: 561.3, y: 485, completed: false },
+        { id: "stor_trash", room: "Storage", name: "Esvaziar o Lixo", type: "TRASH", x: 596.6, y: 619.6, completed: false },
+        { id: "admin_card", room: "Admin", name: "Passar o Cartão", type: "SWIPE", x: 750.6, y: 373.6, completed: false },
+        { id: "admin_down", room: "Admin", name: "Download", type: "DOWNLOAD", x: 145.3, y: 210.3, completed: false },
+        { id: "nav_align", room: "Navigation", name: "Alinhar Curso", type: "ALIGN", x: 558, y: 665.6, completed: false },
+        { id: "o2_filter", room: "O2", name: "Limpar Filtro", type: "LEAVES", x: 742, y: 69.6, completed: false },
+        { id: "o2_trash", room: "O2", name: "Esvaziar Lixo", type: "TRASH", x: 642.6, y: 551.6, completed: false },
+        { id: "weap_aster", room: "Weapons", name: "Atirar Asteroides", type: "ASTEROIDS", x: 830, y: 137, completed: false },
+        { id: "weap_down", room: "Weapons", name: "Download", type: "DOWNLOAD", x: 733.3, y: 562.3, completed: false }
+    ];
 
     // ==========================================
     // 2. CARREGAMENTO E COLISÃO
@@ -218,15 +222,22 @@
     }
 
     // ==========================================
-    // 3. JOGADOR E BOTS
+    // 3. JOGADOR E BOTS (COM ANIMAÇÃO CORRIGIDA)
     // ==========================================
-    const player = { x: CONFIG.spawnX, y: CONFIG.spawnY, facingRight: true, isMoving: false };
+    const player = { 
+        x: CONFIG.spawnX, y: CONFIG.spawnY, 
+        facingRight: true, isMoving: false,
+        frameIndex: 0, frameTimer: 0 // Controle de animação do player
+    };
 
     class Bot {
         constructor(x, y) {
             this.x = x; this.y = y;
-            this.vx = (Math.random() - 0.5) * CONFIG.playerSpeed * 0.7; this.vy = (Math.random() - 0.5) * CONFIG.playerSpeed * 0.7;
+            this.vx = (Math.random() - 0.5) * CONFIG.playerSpeed * 0.7; 
+            this.vy = (Math.random() - 0.5) * CONFIG.playerSpeed * 0.7;
             this.timer = 0; this.facingRight = true; this.isMoving = false;
+            this.frameIndex = Math.floor(Math.random() * CONFIG.numFrames); // Inicia frame aleatório
+            this.frameTimer = 0;
         }
         update() {
             this.timer--;
@@ -240,7 +251,25 @@
         draw(ctx) {
             ctx.save(); ctx.translate(this.x, this.y);
             if (!this.facingRight) ctx.scale(-1, 1);
-            ctx.drawImage(this.isMoving ? assets.playerRun : assets.playerIdle, -CONFIG.playerSize / 2, -CONFIG.playerSize / 2, CONFIG.playerSize, CONFIG.playerSize);
+            
+            // LÓGICA DE SPRITESHEET DO BOT
+            if (this.isMoving) {
+                this.frameTimer++;
+                if (this.frameTimer >= CONFIG.frameSpeed) {
+                    this.frameIndex = (this.frameIndex + 1) % CONFIG.numFrames;
+                    this.frameTimer = 0;
+                }
+                let frameW = assets.playerRun.width / CONFIG.numFrames;
+                ctx.drawImage(
+                    assets.playerRun, 
+                    this.frameIndex * frameW, 0, frameW, assets.playerRun.height,
+                    -CONFIG.playerSize / 2, -CONFIG.playerSize / 2, CONFIG.playerSize, CONFIG.playerSize
+                );
+            } else {
+                this.frameIndex = 0;
+                ctx.drawImage(assets.playerIdle, -CONFIG.playerSize / 2, -CONFIG.playerSize / 2, CONFIG.playerSize, CONFIG.playerSize);
+            }
+            
             ctx.restore();
         }
     }
@@ -313,7 +342,6 @@
         let worldX = ((e.clientX - rect.left) - canvas.width / 2) / CONFIG.cameraZoom + player.x;
         let worldY = ((e.clientY - rect.top) - canvas.height / 2) / CONFIG.cameraZoom + player.y;
 
-        // Clicando em Setas da Tubulação
         if (playerInVent && currentVentId !== null) {
             let currentVent = ventsData.find(v => v.id === currentVentId);
             if(currentVent && currentVent.links) {
@@ -324,7 +352,8 @@
                         let ax = currentVent.x + Math.cos(angle) * 35; 
                         let ay = currentVent.y + Math.sin(angle) * 35;
                         if (Math.hypot(worldX - ax, worldY - ay) < 20) {
-                            player.x = destVent.x; player.y = destVent.y; currentVentId = destVent.id; sfx.play('ventEnter'); 
+                            player.x = destVent.x; player.y = destVent.y; currentVentId = destVent.id; 
+                            sfx.play('ventEnter'); 
                         }
                     }
                 });
@@ -332,27 +361,27 @@
             return; 
         }
 
-        // Modo Construtor
         if (showDebugUI && document.getElementById('chkBuildVent').checked && gameState === 'PLAYING') {
             if (ventBuildStep === 1) {
                 let newVent = { id: `vent_${ventIdCounter++}`, x: worldX, y: worldY, links:[] }; ventsData.push(newVent);
-                tempOrigemId = newVent.id; ventBuildStep = 2; document.getElementById('ventBuilderStatus').innerText = "Clique para Saída";
+                tempOrigemId = newVent.id; ventBuildStep = 2; document.getElementById('ventBuilderStatus').innerText = "Clique para definir a Saída";
             } else if (ventBuildStep === 2) {
                 let newVent = { id: `vent_${ventIdCounter++}`, x: worldX, y: worldY, links:[] }; ventsData.push(newVent);
                 ventsData.find(v => v.id === tempOrigemId).links.push(newVent.id);
                 newVent.links.push(tempOrigemId);
-                ventBuildStep = 1; document.getElementById('ventBuilderStatus').innerText = "Link Criado! Clique Origem";
+                ventBuildStep = 1; document.getElementById('ventBuilderStatus').innerText = "Link Criado! Clique p/ nova Origem";
             }
             return;
         }
 
-        if (showDebugUI && document.getElementById('chkSetSpawn').checked && gameState === 'PLAYING') { CONFIG.spawnX = Math.round(worldX); CONFIG.spawnY = Math.round(worldY); }
+        if (showDebugUI && document.getElementById('chkSetSpawn').checked && gameState === 'PLAYING') {
+            CONFIG.spawnX = Math.round(worldX); CONFIG.spawnY = Math.round(worldY);
+        }
 
-        // Cliques dentro das TASKS
         if (gameState === 'DOING_TASK') {
             let cx = canvas.width / 2; let cy = canvas.height / 2;
-            let localMouseX = mouseX - cx; let localMouseY = mouseY - cy; // Relativo ao centro da tela
-
+            let localMouseX = mouseX - cx; let localMouseY = mouseY - cy;
+            
             if(currentTaskOpen.type === 'ASTEROIDS') {
                 let hit = false;
                 for (let i = miniGameData.asteroids.length - 1; i >= 0; i--) {
@@ -368,21 +397,20 @@
                 if (localMouseX > -60 && localMouseX < 60 && localMouseY > 120 && localMouseY < 160) { miniGameData.isDownloading = true; sfx.play('click'); }
             }
             else {
-                // Para todas as outras Tasks (Botão de completar)
                 if (localMouseX > -100 && localMouseX < 100 && localMouseY > 140 && localMouseY < 190) { sfx.play('click'); concluirTask(); }
             }
         }
     });
 
     // ==========================================
-    // 6. UI E DESENHO DE MINIGAMES COMPLETOS
+    // 6. UI E FUNÇÕES MINIGAMES
     // ==========================================
     document.getElementById('chkSound').addEventListener('change', e => sfx.enabled = e.target.checked);
     document.getElementById('chkBuildVent').addEventListener('change', (e) => { ventBuildStep = e.target.checked ? 1 : 0; document.getElementById('ventBuilderStatus').innerText = e.target.checked ? "Clique no mapa: Origem" : "Aguardando..."; });
     document.querySelectorAll('input[name="myRole"]').forEach(r => r.addEventListener('change', e => CONFIG.myRole = e.target.value));
     document.querySelectorAll('input[name="ventRule"]').forEach(r => r.addEventListener('change', e => CONFIG.ventRule = e.target.value));
     document.getElementById('btnTeleport').addEventListener('click', () => { player.x = CONFIG.spawnX; player.y = CONFIG.spawnY; });
-    document.getElementById('btnGenerate').addEventListener('click', () => { document.getElementById('configOutput').value = JSON.stringify({ config: CONFIG, placedTasks: tasks, tubulacoes: ventsData }, null, 2); });
+    document.getElementById('btnGenerate').addEventListener('click', () => { document.getElementById('configOutput').value = JSON.stringify({ config: CONFIG, tubulacoes: ventsData }, null, 2); });
     const sZoom = document.getElementById('zoomSlider'); const sSpeed = document.getElementById('speedSlider');
     function updateConfigFromUI() { CONFIG.cameraZoom = parseFloat(sZoom.value); document.getElementById('valZoom').innerText = CONFIG.cameraZoom; CONFIG.playerSpeed = parseFloat(sSpeed.value); }
     sZoom.addEventListener('input', updateConfigFromUI); sSpeed.addEventListener('input', updateConfigFromUI);
@@ -413,7 +441,6 @@
         let localMouseX = mouseX - canvas.width / 2; let localMouseY = mouseY - canvas.height / 2;
         let time = Date.now();
 
-        // DESENHOS DE TODAS AS TASKS
         switch (currentTaskOpen.type) {
             case 'WIRES':
                 ctx.fillStyle = '#222938'; ctx.beginPath(); ctx.roundRect(-250, -130, 500, 260, 10); ctx.fill();
@@ -506,13 +533,11 @@
                 break; 
         }
 
-        // BOTÃO DE COMPLETAR (Apenas para as Tasks que não são minigames de mouse)
         if (currentTaskOpen.type !== 'ASTEROIDS' && currentTaskOpen.type !== 'DOWNLOAD') {
             ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.roundRect(-100, 140, 200, 50, 10); ctx.fill();
             ctx.fillStyle = '#fff'; ctx.font = 'bold 16px Arial'; ctx.textAlign='center'; ctx.fillText('CLIQUE PARA COMPLETAR', 0, 170);
         }
 
-        // Header Superior
         ctx.fillStyle = '#0f1423'; ctx.beginPath(); ctx.roundRect(-325, -225, 650, 60,[15, 15, 0, 0]); ctx.fill();
         ctx.fillStyle = '#00ffcc'; ctx.font = 'bold 22px "Segoe UI"'; ctx.textAlign = 'center'; ctx.fillText(`[${currentTaskOpen.room}] - ${currentTaskOpen.name}`, 0, -187);
 
@@ -547,14 +572,19 @@
         ctx.save(); ctx.translate(canvas.width / 2, canvas.height / 2); ctx.scale(CONFIG.cameraZoom, CONFIG.cameraZoom); ctx.translate(-player.x, -player.y);
         ctx.drawImage(assets.map, 0, 0);
 
+        // --- SOLUÇÃO: IMAGEM DA TUBULAÇÃO 100% ---
         ventsData.forEach(vent => {
-            let ventW = 34 * 0.5; let ventH = 24 * 0.5; // Imagem 50%
-            ctx.drawImage(assets.ventBase, vent.x - ventW/2, vent.y - ventH/2, ventW, ventH);
+            let isNear = Math.hypot(player.x - vent.x, player.y - vent.y) < 30;
             
-            if (Math.hypot(player.x - vent.x, player.y - vent.y) < 30 && canUseVents() && !playerInVent) {
-                let pulse = Math.abs(Math.sin(Date.now() / 150)) * 2;
-                ctx.strokeStyle = `rgba(255, 255, 0, ${0.7 + pulse/10})`; ctx.lineWidth = 1 + pulse;
-                ctx.strokeRect(vent.x - ventW/2, vent.y - ventH/2, ventW, ventH); 
+            if (isNear && canUseVents() && !playerInVent) {
+                // Tamanho original (100%) da imagem (ou o valor padrão se não carregou)
+                let ventW = assets.ventBase.width || 68; 
+                let ventH = assets.ventBase.height || 48;
+                
+                let pulse = Math.abs(Math.sin(Date.now() / 150)) * 0.3;
+                ctx.globalAlpha = 0.7 + pulse; // Leve piscar na opacidade para indicar foco
+                ctx.drawImage(assets.ventBase, vent.x - ventW/2, vent.y - ventH/2, ventW, ventH);
+                ctx.globalAlpha = 1.0; 
             }
         });
 
@@ -566,7 +596,13 @@
                     if(destVent) {
                         let angle = Math.atan2(destVent.y - currentVent.y, destVent.x - currentVent.x);
                         ctx.save(); ctx.translate(currentVent.x + Math.cos(angle) * 35, currentVent.y + Math.sin(angle) * 35);
-                        ctx.rotate(angle); ctx.drawImage(assets.ventArrow, -7.5, -7.5, 15, 15); ctx.restore(); // Seta 50%
+                        ctx.rotate(angle); 
+                        
+                        // Seta reduzida para 50%
+                        let arrowW = (assets.ventArrow.width || 30) * 0.5; 
+                        let arrowH = (assets.ventArrow.height || 30) * 0.5;
+                        ctx.drawImage(assets.ventArrow, -arrowW/2, -arrowH/2, arrowW, arrowH); 
+                        ctx.restore(); 
                     }
                 });
             }
@@ -584,10 +620,27 @@
 
         bots.forEach(b => b.draw(ctx));
 
+        // LÓGICA DE SPRITESHEET DO JOGADOR PRINCIPAL
         if (!playerInVent) {
             ctx.save(); ctx.translate(player.x, player.y);
             if (!player.facingRight) ctx.scale(-1, 1);
-            ctx.drawImage(player.isMoving ? assets.playerRun : assets.playerIdle, -CONFIG.playerSize / 2, -CONFIG.playerSize / 2, CONFIG.playerSize, CONFIG.playerSize);
+            
+            if (player.isMoving) {
+                player.frameTimer++;
+                if (player.frameTimer >= CONFIG.frameSpeed) {
+                    player.frameIndex = (player.frameIndex + 1) % CONFIG.numFrames;
+                    player.frameTimer = 0;
+                }
+                let frameW = assets.playerRun.width / CONFIG.numFrames;
+                ctx.drawImage(
+                    assets.playerRun, 
+                    player.frameIndex * frameW, 0, frameW, assets.playerRun.height,
+                    -CONFIG.playerSize / 2, -CONFIG.playerSize / 2, CONFIG.playerSize, CONFIG.playerSize
+                );
+            } else {
+                player.frameIndex = 0;
+                ctx.drawImage(assets.playerIdle, -CONFIG.playerSize / 2, -CONFIG.playerSize / 2, CONFIG.playerSize, CONFIG.playerSize);
+            }
             ctx.restore();
         }
         ctx.restore(); 

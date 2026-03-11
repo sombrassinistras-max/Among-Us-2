@@ -1,6 +1,9 @@
 let CONFIG = {
     cameraZoom: 4, playerSize: 20, hitboxRadius: 5, playerSpeed: 2,
-    spawnX: 606, spawnY: 104, myRole: "IMPOSTOR", ventRule: "RESTRICTED"
+    spawnX: 606, spawnY: 104, 
+    buttonX: 799, buttonY: 201, // POSIÇÃO INICIAL DO BOTÃO (Mesa da Cafeteria)
+    myRole: "CREWMATE", ventRule: "RESTRICTED",
+    numFrames: 4, frameSpeed: 5 
 };
 
 const tasks =[
@@ -36,7 +39,6 @@ let ventsData =[
     { id: "vent_13", x: 387, y: 271.625, links:[] }
 ];
 
-// Transforma os dutos em Ida e Volta
 ventsData.forEach(v => {
     v.links.forEach(linkId => {
         let target = ventsData.find(t => t.id === linkId);

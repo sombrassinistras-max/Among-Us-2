@@ -28,12 +28,14 @@ class SoundBank {
             case 'click': this.playTone(800, 'square', 0.05, 0.05); break;
             case 'shoot': this.playTone(800, 'sawtooth', 0.15, 0.1, 200); break;
             case 'error': this.playTone(150, 'sawtooth', 0.2, 0.1, 100); break;
+            case 'alarm': this.playTone(200, 'square', 0.8, 0.3, 100); break; // Som de reunião
         }
     }
 }
 const sfx = new SoundBank();
 
-let gameState = "PLAYING"; let currentTaskOpen = null; let showDebugUI = false;
+let gameState = "PLAYING"; // PLAYING, DOING_TASK, VOTING
+let currentTaskOpen = null; let showDebugUI = false;
 let playerInVent = false; let currentVentId = null; let ventBuildStep = 0; let tempOrigemId = null; let ventIdCounter = 20; 
 let miniGameData = { asteroids:[], destroyedCount: 0, downloadProgress: 0, isDownloading: false }; let stepTimer = 0;
 
@@ -73,15 +75,25 @@ function checkHitboxCollision(x, y, radius) {
     return false;
 }
 
-const player = { x: CONFIG.spawnX, y: CONFIG.spawnY, facingRight: true, isMoving: false };
+const player = { x: CONFIG.spawnX, y: CONFIG.spawnY, facingRight: true, isMoving: false, name: "Você" };
+
+// Nomes Aleatórios para os Bots
+const possibleNames =["Ciano", "Verde", "Rosa", "Laranja", "Preto", "Branco", "Amarelo", "Roxo"];
+function getRandomName() {
+    let index = Math.floor(Math.random() * possibleNames.length);
+    return possibleNames.splice(index, 1)[0]; // Remove o nome da lista para não repetir
+}
 
 class Bot {
     constructor(x, y) {
         this.x = x; this.y = y;
         this.vx = (Math.random() - 0.5) * CONFIG.playerSpeed * 0.7; this.vy = (Math.random() - 0.5) * CONFIG.playerSpeed * 0.7;
         this.timer = 0; this.facingRight = true; this.isMoving = false;
+        this.name = getRandomName(); // Aplica Nome
+        this.isAlive = true;
     }
     update() {
+        if(!this.isAlive) return;
         this.timer--;
         if(this.timer <= 0) { this.vx = (Math.random() - 0.5) * CONFIG.playerSpeed; this.vy = (Math.random() - 0.5) * CONFIG.playerSpeed; this.timer = Math.random() * 150 + 50; }
         this.facingRight = this.vx > 0;
@@ -91,6 +103,7 @@ class Bot {
         this.isMoving = (Math.abs(moveX) > 0.1 || Math.abs(moveY) > 0.1);
     }
     draw(ctx) {
+        if(!this.isAlive) return;
         ctx.save(); ctx.translate(this.x, this.y);
         if (!this.facingRight) ctx.scale(-1, 1);
         if (this.isMoving) { ctx.translate(0, -Math.abs(Math.sin(Date.now() / 120 + this.x)) * 3); ctx.rotate(Math.sin(Date.now() / 120 + this.x) * 0.15); }
@@ -99,11 +112,18 @@ class Bot {
     }
 }
 const bots =[];
-for(let i=0; i<4; i++) { bots.push(new Bot(CONFIG.spawnX + (Math.random()*20-10), CONFIG.spawnY + (Math.random()*20-10))); }
+for(let i=0; i<5; i++) { bots.push(new Bot(CONFIG.spawnX + (Math.random()*20-10), CONFIG.spawnY + (Math.random()*20-10))); }
 
 function canUseVents() { return CONFIG.ventRule === "FREE" || (CONFIG.ventRule === "RESTRICTED" && CONFIG.myRole === "IMPOSTOR"); }
+
 function getNearbyInteractable() {
+    // 1. Checa o Botão de Emergência
+    if (Math.hypot(player.x - CONFIG.buttonX, player.y - CONFIG.buttonY) < 40) return { type: 'BUTTON' };
+    
+    // 2. Checa Dutos
     if (canUseVents()) { for (let vent of ventsData) { if (Math.hypot(player.x - vent.x, player.y - vent.y) < 30) return { type: 'VENT', obj: vent }; } }
+    
+    // 3. Checa Tasks
     if(CONFIG.myRole !== "IMPOSTOR") { for (let task of tasks) { if (!task.completed && Math.hypot(player.x - task.x, player.y - task.y) < 30) return { type: 'TASK', obj: task }; } }
     return null;
 }
@@ -112,9 +132,11 @@ const keys = { w: false, a: false, s: false, d: false };
 
 window.addEventListener('keydown', (e) => {
     sfx.init(); 
-    if(gameState === 'DOING_TASK') { if(e.key === 'Escape') fecharTask(); return; }
+    if(gameState === 'DOING_TASK' || gameState === 'VOTING') { if(e.key === 'Escape') fecharMenus(); return; }
+    
     if (e.key === 'w' || e.key === 'ArrowUp') keys.w = true; if (e.key === 'a' || e.key === 'ArrowLeft') keys.a = true;
     if (e.key === 's' || e.key === 'ArrowDown') keys.s = true; if (e.key === 'd' || e.key === 'ArrowRight') keys.d = true;
+    
     if (e.key === 'e' || e.key === 'E') {
         if (playerInVent) { playerInVent = false; currentVentId = null; sfx.play('ventExit'); } 
         else {
@@ -122,6 +144,7 @@ window.addEventListener('keydown', (e) => {
             if (inter) {
                 if (inter.type === 'TASK') { currentTaskOpen = inter.obj; gameState = 'DOING_TASK'; keys.w = keys.a = keys.s = keys.d = false; sfx.play('taskOpen'); iniciarMinigame(); } 
                 else if (inter.type === 'VENT') { playerInVent = true; currentVentId = inter.obj.id; player.x = inter.obj.x; player.y = inter.obj.y; keys.w = keys.a = keys.s = keys.d = false; sfx.play('ventEnter'); }
+                else if (inter.type === 'BUTTON') { gameState = 'VOTING'; keys.w = keys.a = keys.s = keys.d = false; sfx.play('alarm'); }
             }
         }
     }
@@ -138,6 +161,21 @@ canvas.addEventListener('mousedown', (e) => {
     let worldX = ((e.clientX - rect.left) - canvas.width / 2) / CONFIG.cameraZoom + player.x;
     let worldY = ((e.clientY - rect.top) - canvas.height / 2) / CONFIG.cameraZoom + player.y;
 
+    // VOTAÇÃO CLIQUES
+    if (gameState === 'VOTING') {
+        let cx = canvas.width / 2; let cy = canvas.height / 2;
+        let localX = mouseX - cx; let localY = mouseY - cy;
+        
+        // Clicar em Bots
+        bots.forEach((b, i) => {
+            let bx = (i % 2 === 0) ? -280 : 80; let by = -60 + Math.floor(i / 2) * 70;
+            if(localX > bx && localX < bx+200 && localY > by && localY < by+50) { sfx.play('click'); fecharMenus(); /* Mock Vote Ends */ }
+        });
+        // Skip Vote
+        if(localX > -100 && localX < 100 && localY > 180 && localY < 220) { sfx.play('click'); fecharMenus(); }
+        return;
+    }
+
     if (playerInVent && currentVentId !== null) {
         let currentVent = ventsData.find(v => v.id === currentVentId);
         if(currentVent && currentVent.links) {
@@ -153,6 +191,11 @@ canvas.addEventListener('mousedown', (e) => {
         }
         return; 
     }
+    
+    // DEBUG: DEFINIR BOTÃO
+    if (showDebugUI && document.getElementById('chkSetButton').checked && gameState === 'PLAYING') {
+        CONFIG.buttonX = Math.round(worldX); CONFIG.buttonY = Math.round(worldY); return;
+    }
     if (showDebugUI && document.getElementById('chkBuildVent').checked && gameState === 'PLAYING') {
         if (ventBuildStep === 1) {
             let newVent = { id: `vent_${ventIdCounter++}`, x: worldX, y: worldY, links:[] }; ventsData.push(newVent);
@@ -164,7 +207,7 @@ canvas.addEventListener('mousedown', (e) => {
         }
         return;
     }
-    if (showDebugUI && document.getElementById('chkSetSpawn').checked && gameState === 'PLAYING') { CONFIG.spawnX = Math.round(worldX); CONFIG.spawnY = Math.round(worldY); }
+    if (showDebugUI && document.getElementById('chkSetSpawn').checked && gameState === 'PLAYING') { CONFIG.spawnX = Math.round(worldX); CONFIG.spawnY = Math.round(worldY); return;}
 
     if (gameState === 'DOING_TASK') {
         let cx = canvas.width / 2; let cy = canvas.height / 2; let localMouseX = mouseX - cx; let localMouseY = mouseY - cy;
@@ -194,9 +237,9 @@ const sZoom = document.getElementById('zoomSlider'); const sSpeed = document.get
 function updateConfigFromUI() { CONFIG.cameraZoom = parseFloat(sZoom.value); document.getElementById('valZoom').innerText = CONFIG.cameraZoom; CONFIG.playerSpeed = parseFloat(sSpeed.value); }
 sZoom.addEventListener('input', updateConfigFromUI); sSpeed.addEventListener('input', updateConfigFromUI);
 
-function fecharTask() { currentTaskOpen = null; gameState = 'PLAYING'; }
+function fecharMenus() { currentTaskOpen = null; gameState = 'PLAYING'; }
 function iniciarMinigame() { miniGameData = { asteroids:[], destroyedCount: 0, downloadProgress: 0, isDownloading: false }; }
-function concluirTask() { currentTaskOpen.completed = true; sfx.play('taskComplete'); fecharTask(); }
+function concluirTask() { currentTaskOpen.completed = true; sfx.play('taskComplete'); fecharMenus(); }
 
 function updateMiniGames() {
     if(currentTaskOpen.type === 'ASTEROIDS') {
@@ -207,6 +250,39 @@ function updateMiniGames() {
     if(currentTaskOpen.type === 'DOWNLOAD' && miniGameData.isDownloading) {
         miniGameData.downloadProgress += 0.5; if(miniGameData.downloadProgress >= 100) concluirTask();
     }
+}
+
+function drawVotingScreen(ctx) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.9)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.save(); ctx.translate(canvas.width / 2, canvas.height / 2);
+    
+    // Fundo Painel Votação
+    ctx.fillStyle = '#1c2331'; ctx.beginPath(); ctx.roundRect(-350, -250, 700, 500, 15); ctx.fill(); ctx.strokeStyle = '#394b5f'; ctx.lineWidth = 4; ctx.stroke();
+    
+    // Título
+    ctx.fillStyle = '#ff0000'; ctx.font = 'bold 30px Arial'; ctx.textAlign = 'center'; ctx.fillText("QUEM É O IMPOSTOR?", 0, -200);
+
+    // Box Jogador
+    ctx.fillStyle = '#2c3e50'; ctx.beginPath(); ctx.roundRect(-280, -140, 200, 50, 10); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'left'; ctx.fillText(player.name + ` (${CONFIG.myRole})`, -260, -110);
+
+    // Box Bots
+    bots.forEach((b, i) => {
+        let bx = (i % 2 === 0) ? -280 : 80; let by = -60 + Math.floor(i / 2) * 70;
+        
+        ctx.fillStyle = '#34495e'; ctx.beginPath(); ctx.roundRect(bx, by, 200, 50, 10); ctx.fill();
+        // Efeito Hover Mouse
+        if(mouseX - canvas.width/2 > bx && mouseX - canvas.width/2 < bx+200 && mouseY - canvas.height/2 > by && mouseY - canvas.height/2 < by+50) {
+            ctx.strokeStyle = '#00ffcc'; ctx.strokeRect(bx, by, 200, 50);
+        }
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 16px Arial'; ctx.fillText(b.name, bx + 20, by + 30);
+    });
+
+    // Pular Voto
+    ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.roundRect(-100, 180, 200, 40, 10); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText("PULAR VOTO", 0, 206);
+    
+    ctx.restore();
 }
 
 function drawTaskInterface(ctx) {
@@ -276,7 +352,7 @@ function drawTaskInterface(ctx) {
 }
 
 function update() {
-    if (gameState === 'DOING_TASK') { updateMiniGames(); return; }
+    if (gameState === 'DOING_TASK' || gameState === 'VOTING') { updateMiniGames(); return; }
     if (playerInVent) return; 
 
     let moveX = 0; let moveY = 0;
@@ -297,6 +373,13 @@ function draw() {
     ctx.save(); ctx.translate(canvas.width / 2, canvas.height / 2); ctx.scale(CONFIG.cameraZoom, CONFIG.cameraZoom); ctx.translate(-player.x, -player.y);
     ctx.drawImage(assets.map, 0, 0);
 
+    // Desenhar Botão de Emergência
+    ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.arc(CONFIG.buttonX, CONFIG.buttonY, 15, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)'; ctx.beginPath(); ctx.arc(CONFIG.buttonX, CONFIG.buttonY, 12, 0, Math.PI*2); ctx.fill();
+    if (Math.hypot(player.x - CONFIG.buttonX, player.y - CONFIG.buttonY) < 40 && !playerInVent) {
+        ctx.strokeStyle = 'yellow'; ctx.lineWidth = 2; ctx.stroke();
+    }
+
     ventsData.forEach(vent => {
         let isNear = Math.hypot(player.x - vent.x, player.y - vent.y) < 30;
         if (isNear && canUseVents() && !playerInVent) {
@@ -314,8 +397,7 @@ function draw() {
                 if(destVent) {
                     let angle = Math.atan2(destVent.y - currentVent.y, destVent.x - currentVent.x);
                     ctx.save(); ctx.translate(currentVent.x + Math.cos(angle) * 35, currentVent.y + Math.sin(angle) * 35);
-                    ctx.rotate(angle); 
-                    let arrowW = (assets.ventArrow.width || 30) * 0.5; let arrowH = (assets.ventArrow.height || 30) * 0.5;
+                    ctx.rotate(angle); let arrowW = (assets.ventArrow.width || 30) * 0.5; let arrowH = (assets.ventArrow.height || 30) * 0.5;
                     ctx.drawImage(assets.ventArrow, -arrowW/2, -arrowH/2, arrowW, arrowH); ctx.restore(); 
                 }
             });
@@ -342,18 +424,21 @@ function draw() {
     ctx.restore(); 
 
     if (gameState === 'PLAYING') {
+        let inter = getNearbyInteractable();
         if (playerInVent) {
             ctx.fillStyle = 'rgba(200,0,0,0.8)'; ctx.beginPath(); ctx.roundRect(canvas.width/2 - 70, canvas.height/2 + 60, 140, 35, 8); ctx.fill();
             ctx.fillStyle = '#fff'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center'; ctx.fillText('Sair [E]', canvas.width/2, canvas.height/2 + 84);
-        } else {
-            let inter = getNearbyInteractable();
-            if (inter) {
-                ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.beginPath(); ctx.roundRect(canvas.width/2 - 70, canvas.height/2 + 60, 140, 35, 8); ctx.fill();
-                ctx.fillStyle = '#00ffcc'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center'; ctx.fillText(inter.type==='VENT' ? 'Duto [E]' : 'Usar [E]', canvas.width/2, canvas.height/2 + 84);
-            }
+        } else if (inter) {
+            let msg = 'Usar [E]';
+            if(inter.type === 'VENT') msg = 'Duto [E]';
+            if(inter.type === 'BUTTON') msg = 'Reunião [E]';
+
+            ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.beginPath(); ctx.roundRect(canvas.width/2 - 70, canvas.height/2 + 60, 140, 35, 8); ctx.fill();
+            ctx.fillStyle = '#00ffcc'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center'; ctx.fillText(msg, canvas.width/2, canvas.height/2 + 84);
         }
     }
     if (gameState === 'DOING_TASK') drawTaskInterface(ctx);
+    if (gameState === 'VOTING') drawVotingScreen(ctx);
 }
 
 function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
